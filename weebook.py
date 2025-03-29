@@ -1,11 +1,14 @@
 from flask import Flask, request, jsonify
+from woo_api import mostrar_productos_con_inventario
 import requests
+import time
+
 
 app = Flask(__name__)
 
 # Configuración de la API de WhatsApp
 VERIFY_TOKEN = "TU_TOKEN_VERIFICACION"
-ACCESS_TOKEN = "EAAJoXxVG3sEBOZBIc0Ml36ZCbCnXIlwotx7QrtnZBzqn1o3hny72McjcI4hQWkrJb3RVKhwwvrYYC4i5XFNtyxRbDZBx4XKkmx7neWsf73v0thxYclLTkwgJCsELvq6CZCNpaP2xr6sukFTGOc4QmQASzuj6vsCPsdvMpX6WCkXwwPFJ2vkwmzhaKHzY0ZCxjGZAGZCEEGH3vQBg9z7Nc01CKUV6jGoZD"
+ACCESS_TOKEN = "EAAJoXxVG3sEBOyXoSELhlkZBPQpOlwyhJenH8KLo9YPOjLQmcbRgualtoPFpqrRx4Cr6IJQ0nAuv7qSKiL62TsQUO6eYeejCo3z8sbNopI18fQJAj1zmVBAs80NrcTTgGKm8JB8sYszsdrzr1kZAdaZC9a6tZCZCXB3Rkl4ZBE3mVtReexU6XPYmZAcELtpv6LLNH9lpZBwi7ZAZC1atBaCtGnofSzfNcZD"
 PHONE_NUMBER_ID = "584419411425075"
 WHATSAPP_API_URL = f"https://graph.facebook.com/v17.0/{PHONE_NUMBER_ID}/messages"
 HEADERS = {
@@ -58,7 +61,11 @@ def procesar_mensaje(mensaje):
 
 def manejar_interactivo(interactivo, telefono):
     """ Maneja las respuestas interactivas """
-    if "button_reply" in interactivo:
+    if "list_reply" in interactivo:
+        opcion_id = interactivo["list_reply"]["id"]
+        print(f"Opción seleccionada por {telefono}: {opcion_id}")
+        manejar_opcion(opcion_id, telefono)
+    elif "button_reply" in interactivo:
         opcion_id = interactivo["button_reply"]["id"]
         print(f"Opción seleccionada por {telefono}: {opcion_id}")
         manejar_opcion(opcion_id, telefono)
@@ -74,9 +81,12 @@ def manejar_opcion(opcion_id, telefono):
         "pagina_web": lambda: responder_mensaje(
             telefono, "Antes de comprar, por favor crea una cuenta 📋🔑 \n https://www.relojescurrenmexico.com.mx/tienda/"
         ),
-        "imagenes": lambda: responder_mensaje(
-            telefono, "Aquí tienes nuestro catálogo en imágenes: https://tutienda.com/imagenes"
-        ),
+        "imagenes": lambda: tipo_catalogo(telefono),
+        # "hombre": lambda: productos_total(telefono, 17),
+        "mujer": lambda: productos_total(telefono, 25),
+        # "ofertas": lambda: productos_total(telefono, 18),
+        # "cronografos": lambda: productos_total(telefono, 19),
+        # "todos": lambda: productos_total(telefono),
         "ayuda_pedido": lambda: enviar_mensaje_interactivo(
             telefono,
             "📦 ¿En qué podemos asistirte con tu pedido enviado? 😊",
@@ -167,6 +177,57 @@ def eliminar_contexto(telefono):
     """ Elimina el contexto del cliente """
     if telefono in contextos:
         del contextos[telefono]
+
+def tipo_catalogo(telefono):
+    """ Envía un mensaje interactivo con opciones por WhatsApp """
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": telefono,
+        "type": "interactive",
+        "interactive": {
+            "type": "list",
+            "body": {"text": "🔍✨ Presiona VER OPCIONES y descubre los diferentes tipos de relojes que tenemos para ti. ¡Elige el que más te guste! ⌚🔥"},
+            "action": {
+                "button": "Ver opciones",
+                "sections": [
+                    {
+                        "title": "Categorías",
+                        "rows": [
+                            {"id": "hombre", "title": "Hombre", "description": "Productos para caballeros"},
+                            {"id": "mujer", "title": "Mujer", "description": "Productos para damas"},
+                            {"id": "ofertas", "title": "Ofertas", "description": "Descuentos especiales"},
+                            {"id": "todos", "title": "Todos", "description": "Ver todos los productos"}
+                        ]
+                    }
+                ]
+            }
+        }
+    }
+    enviar_solicitud(payload)
+
+def productos_total(telefono, tipo):
+    """ Envía los productos disponibles al cliente """
+    productos = list(mostrar_productos_con_inventario(tipo))  # Convertir el generador en una lista
+    print("Productos:", productos)
+    if productos:
+        for producto in productos:
+            # Enviar mensaje con imagen y subtítulo
+            payload = {
+                "messaging_product": "whatsapp",
+                "to": telefono,
+                "type": "image",
+                "image": {
+                    "link": producto['image'],  # URL de la imagen
+                    "caption": f"Producto: {producto['name']}\nPrecio: ${producto['price']}" # Subtítulo del mensaje
+                }
+            }
+            #print("Enviando payload:", payload)  # Depuración: imprime el payload antes de enviarlo
+            enviar_solicitud(payload)
+            time.sleep(3)
+    else:
+        responder_mensaje(telefono, "No se encontraron productos disponibles.")
+
+    print("Productos enviados al cliente:", len(productos))
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
