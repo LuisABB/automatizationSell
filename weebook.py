@@ -2,19 +2,22 @@ from flask import Flask, request, jsonify
 from woo_api import mostrar_productos_con_inventario
 import requests
 import time
+import urllib3
 
 
 app = Flask(__name__)
 
 # Configuración de la API de WhatsApp
 VERIFY_TOKEN = "TU_TOKEN_VERIFICACION"
-ACCESS_TOKEN = "EAAJoXxVG3sEBOyXoSELhlkZBPQpOlwyhJenH8KLo9YPOjLQmcbRgualtoPFpqrRx4Cr6IJQ0nAuv7qSKiL62TsQUO6eYeejCo3z8sbNopI18fQJAj1zmVBAs80NrcTTgGKm8JB8sYszsdrzr1kZAdaZC9a6tZCZCXB3Rkl4ZBE3mVtReexU6XPYmZAcELtpv6LLNH9lpZBwi7ZAZC1atBaCtGnofSzfNcZD"
+ACCESS_TOKEN = "EAAJoXxVG3sEBOzpWnChW27IAWLnOHb2DXhKiZB2XJZCDqZAQTTXaFF1gcInv3RHk1xG0rkZCuZCwDbsUuRvalcxAEOPevgnQCNfK4W9YocvigaBBng8pBZBpb4QYK3lcHk3MQgFGlIh95h9x8zWorb7jyZBkZCzy1ZCVtT4Nel4XbJXf9B5IzAi50vQr6NzNXx35DDG2dvmgxOK3G9ZAr0ZALR6ZBwnqxnMZD"
 PHONE_NUMBER_ID = "584419411425075"
 WHATSAPP_API_URL = f"https://graph.facebook.com/v17.0/{PHONE_NUMBER_ID}/messages"
 HEADERS = {
     "Authorization": f"Bearer {ACCESS_TOKEN}",
     "Content-Type": "application/json"
 }
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 @app.route("/", methods=["GET"])
 def verificar_webhook():
@@ -57,21 +60,49 @@ def procesar_mensaje(mensaje):
         else:
             responder_mensaje_con_opciones(telefono)
     elif "interactive" in mensaje:
-        manejar_interactivo(mensaje["interactive"], telefono)
+        # Validar que el campo interactive contenga datos válidos
+        if "list_reply" in mensaje["interactive"] or "button_reply" in mensaje["interactive"]:
+            print(f"Interacción recibida de {telefono}: {mensaje['interactive']}")
+            manejar_interactivo(mensaje["interactive"], telefono)
+        else:
+            print(f"\n\n->Interacción no válida recibida de {telefono}: {mensaje['interactive']}***********************************************\n\n")
+    else:
+        print(f"Mensaje no válido recibido de {telefono}: {mensaje}")
 
 def manejar_interactivo(interactivo, telefono):
     """ Maneja las respuestas interactivas """
     if "list_reply" in interactivo:
-        opcion_id = interactivo["list_reply"]["id"]
-        print(f"Opción seleccionada por {telefono}: {opcion_id}")
-        manejar_opcion(opcion_id, telefono)
+        opcion_id = interactivo["list_reply"].get("id")
+        if opcion_id:
+            print(f"Opción seleccionada por {telefono}: {opcion_id}")
+            manejar_opcion(opcion_id, telefono)  # Llama a manejar_opcion solo si es válido
+        else:
+            print(f"Interacción de lista no válida recibida de {telefono}: {interactivo}")
     elif "button_reply" in interactivo:
-        opcion_id = interactivo["button_reply"]["id"]
-        print(f"Opción seleccionada por {telefono}: {opcion_id}")
-        manejar_opcion(opcion_id, telefono)
+        opcion_id = interactivo["button_reply"].get("id")
+        if opcion_id:
+            print(f"Opción seleccionada por {telefono}: {opcion_id}")
+            manejar_opcion(opcion_id, telefono)  # Llama a manejar_opcion solo si es válido
+        else:
+            print(f"Interacción de botón no válida recibida de {telefono}: {interactivo}")
+    else:
+        print(f"Interacción no válida recibida de {telefono}: {interactivo}")
+
+def guardar_contexto(telefono, contexto):
+    """ Guarda el contexto actual del cliente """
+    contextos[telefono] = contexto
 
 def manejar_opcion(opcion_id, telefono):
     """ Maneja las opciones seleccionadas por el usuario """
+    # Verificar si ya hay una opción en proceso
+    contexto_actual = verificar_contexto(telefono)
+    if contexto_actual and contexto_actual != "completado":
+        print(f"\t\t\n[Ya hay una opción en proceso para {telefono}: {contexto_actual}. Ignorando nueva solicitud...]\n")
+        return
+
+    # Guardar el contexto actual como la opción en proceso
+    guardar_contexto(telefono, opcion_id)
+
     opciones = {
         "ver_catalogo": lambda: enviar_mensaje_interactivo(
             telefono,
@@ -82,11 +113,10 @@ def manejar_opcion(opcion_id, telefono):
             telefono, "Antes de comprar, por favor crea una cuenta 📋🔑 \n https://www.relojescurrenmexico.com.mx/tienda/"
         ),
         "imagenes": lambda: tipo_catalogo(telefono),
-        # "hombre": lambda: productos_total(telefono, 17),
+        "hombre": lambda: productos_total(telefono, 17),
         "mujer": lambda: productos_total(telefono, 25),
-        # "ofertas": lambda: productos_total(telefono, 18),
-        # "cronografos": lambda: productos_total(telefono, 19),
-        # "todos": lambda: productos_total(telefono),
+        "ofertas": lambda: productos_total(telefono, 18),
+        "todos": lambda: productos_total(telefono,None),
         "ayuda_pedido": lambda: enviar_mensaje_interactivo(
             telefono,
             "📦 ¿En qué podemos asistirte con tu pedido enviado? 😊",
@@ -107,9 +137,19 @@ def manejar_opcion(opcion_id, telefono):
             guardar_contexto(telefono, "problemas_pedido")
         )
     }
-    if opcion_id in opciones:
-        opciones[opcion_id]()
 
+    # Validar si la opción seleccionada es válida
+    if opcion_id in opciones:
+        print("\n\n********************************************\n")
+        print(f"Ejecutando opción seleccionada: {opcion_id}")
+        print("********************************************\n\n")
+        try:
+            opciones[opcion_id]()  # Ejecutar la opción seleccionada
+        finally:
+            # Marcar el contexto como completado después de ejecutar la opción
+            guardar_contexto(telefono, "completado")
+    else:
+        print(f"Opción no válida seleccionada: {opcion_id}")
 def responder_mensaje(telefono, mensaje):
     """ Envía un mensaje de texto por WhatsApp """
     payload = {
@@ -149,7 +189,7 @@ def enviar_solicitud(payload):
     """ Envía una solicitud a la API de WhatsApp """
     try:
         response = requests.post(WHATSAPP_API_URL, headers=HEADERS, json=payload)
-        print("Respuesta de la API:", response.json())
+        #print("Respuesta de la API:", response.json())
     except requests.RequestException as e:
         print("Error al enviar la solicitud:", e)
 
@@ -206,28 +246,70 @@ def tipo_catalogo(telefono):
     enviar_solicitud(payload)
 
 def productos_total(telefono, tipo):
-    """ Envía los productos disponibles al cliente """
+    """ Envía los productos disponibles al cliente en lotes con control de frecuencia """
     productos = list(mostrar_productos_con_inventario(tipo))  # Convertir el generador en una lista
-    print("Productos:", productos)
+    #print("Productos:", productos)
+    print("Recuperando productos",tipo, "total:", len(productos))
+
     if productos:
-        for producto in productos:
-            # Enviar mensaje con imagen y subtítulo
-            payload = {
-                "messaging_product": "whatsapp",
-                "to": telefono,
-                "type": "image",
-                "image": {
-                    "link": producto['image'],  # URL de la imagen
-                    "caption": f"Producto: {producto['name']}\nPrecio: ${producto['price']}" # Subtítulo del mensaje
+        lote_tamano = 5  # Número de mensajes por lote
+        tiempo_espera = 1  # Tiempo de espera entre lotes en segundos
+
+        # Dividir los productos en lotes
+        for i in range(0, len(productos), lote_tamano):
+            lote = productos[i:i + lote_tamano]  # Obtener un lote de productos
+            print(f"Enviando lote",i)
+
+            for producto in lote:
+                # Crear el payload para enviar el mensaje
+                payload = {
+                    "messaging_product": "whatsapp",
+                    "to": telefono,
+                    "type": "image",
+                    "image": {
+                        "link": producto['image'],  # URL de la imagen
+                        "caption": f"Producto: {producto['name']}\nPrecio: ${producto['price']}"  # Subtítulo del mensaje
+                    }
                 }
-            }
-            #print("Enviando payload:", payload)  # Depuración: imprime el payload antes de enviarlo
-            enviar_solicitud(payload)
-            time.sleep(3)
+
+                # Enviar el mensaje y verificar la respuesta
+                if enviar_solicitud_y_verificar(payload):
+                    print(f"Mensaje enviado correctamente para el producto: {producto['name']}")
+                else:
+                    print(f"Error al enviar el mensaje para el producto: {producto['name']}. Deteniendo el envío.")
+                    return  # Detener el envío si ocurre un error
+
+            # Esperar antes de enviar el siguiente lote
+            print(f"Esperando {tiempo_espera} segundos antes de enviar el siguiente lote...")
+            time.sleep(tiempo_espera)
     else:
         responder_mensaje(telefono, "No se encontraron productos disponibles.")
 
     print("Productos enviados al cliente:", len(productos))
 
+
+
+def enviar_solicitud_y_verificar(payload):
+    """ Envía una solicitud a la API de WhatsApp y verifica si fue exitosa """
+    try:
+        response = requests.post(WHATSAPP_API_URL, headers=HEADERS, json=payload)
+        response_data = response.json()
+        #print("Respuesta de la API:", response_data)
+
+        # Verificar si la respuesta fue exitosa
+        if response.status_code == 200 and "messages" in response_data:
+            time.sleep(3)  # Esperar 10 segundos antes de intentar nuevamente
+            return True  # Éxito
+        elif response_data.get("error", {}).get("code") == 131056:
+            print("Límite de mensajes alcanzado. Esperando antes de continuar...")
+            time.sleep(10)  # Esperar 10 segundos antes de intentar nuevamente
+            return False  # Fallo debido al límite de mensajes
+        else:
+            print("Error en la respuesta de la API:", response_data)
+            return False  # Fallo por otro motivo
+    except requests.RequestException as e:
+        print("Error al enviar la solicitud:", e)
+        return False  # Fallo
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)
