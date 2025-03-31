@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 # Configuración de la API de WhatsApp
 VERIFY_TOKEN = "TU_TOKEN_VERIFICACION"
-ACCESS_TOKEN = "EAAJoXxVG3sEBOzpWnChW27IAWLnOHb2DXhKiZB2XJZCDqZAQTTXaFF1gcInv3RHk1xG0rkZCuZCwDbsUuRvalcxAEOPevgnQCNfK4W9YocvigaBBng8pBZBpb4QYK3lcHk3MQgFGlIh95h9x8zWorb7jyZBkZCzy1ZCVtT4Nel4XbJXf9B5IzAi50vQr6NzNXx35DDG2dvmgxOK3G9ZAr0ZALR6ZBwnqxnMZD"
+ACCESS_TOKEN = "EAAJoXxVG3sEBOxasOsOZBioErcwCoUWPOao5mPEnudBWwKZCYZBEDmc1dNz2LUeu6ZBSG7awSKWufkiqy5MilK3ed5u3OcIRp13yaklUB7N16fbFwHn7aK4MHw9sxIFs95G1vshRxoinBBaxiCDBjkvcuKZACH88ZCWktZAN8auZCDcY3ZAJ2dWkRw2gc1V7t2DAgAtEz0jMhJn45YiliuvyzcBbdfkcZD"
 PHONE_NUMBER_ID = "584419411425075"
 WHATSAPP_API_URL = f"https://graph.facebook.com/v17.0/{PHONE_NUMBER_ID}/messages"
 HEADERS = {
@@ -211,6 +211,7 @@ def guardar_contexto(telefono, contexto):
 
 def verificar_contexto(telefono):
     """ Verifica el contexto actual del cliente """
+    print(f"Verificando contexto para {telefono}: {contextos.get(telefono)}")
     return contextos.get(telefono)
 
 def eliminar_contexto(telefono):
@@ -233,10 +234,10 @@ def tipo_catalogo(telefono):
                     {
                         "title": "Categorías",
                         "rows": [
-                            {"id": "hombre", "title": "Hombre", "description": "Productos para caballeros"},
-                            {"id": "mujer", "title": "Mujer", "description": "Productos para damas"},
-                            {"id": "ofertas", "title": "Ofertas", "description": "Descuentos especiales"},
-                            {"id": "todos", "title": "Todos", "description": "Ver todos los productos"}
+                            {"id": "hombre", "title": "Hombre", "description": "Déjame ir por el catálogo de caballero, te aviso cuando termine ⏳😊"},
+                            {"id": "mujer", "title": "Mujer", "description": "Déjame ir por el catálogo de dama, te aviso cuando termine ⏳😊"},
+                            {"id": "ofertas", "title": "Ofertas", "description": "Déjame ir por el catálogo de ofertas, te aviso cuando termine ⏳😊"},
+                            {"id": "todos", "title": "Todos", "description": "Déjame ir por todo el catálogo, te aviso cuando termine ⏳😊"}
                         ]
                     }
                 ]
@@ -253,7 +254,7 @@ def productos_total(telefono, tipo):
 
     if productos:
         lote_tamano = 5  # Número de mensajes por lote
-        tiempo_espera = 1  # Tiempo de espera entre lotes en segundos
+        tiempo_espera = 2  # Tiempo de espera entre lotes en segundos
 
         # Dividir los productos en lotes
         for i in range(0, len(productos), lote_tamano):
@@ -298,7 +299,7 @@ def enviar_solicitud_y_verificar(payload):
 
         # Verificar si la respuesta fue exitosa
         if response.status_code == 200 and "messages" in response_data:
-            time.sleep(3)  # Esperar 10 segundos antes de intentar nuevamente
+            time.sleep(2)  # Esperar 10 segundos antes de intentar nuevamente
             return True  # Éxito
         elif response_data.get("error", {}).get("code") == 131056:
             print("Límite de mensajes alcanzado. Esperando antes de continuar...")
